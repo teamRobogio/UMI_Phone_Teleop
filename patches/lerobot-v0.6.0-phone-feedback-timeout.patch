@@ -1,0 +1,13 @@
+diff --git a/src/lerobot/teleoperators/phone/teleop_phone.py b/src/lerobot/teleoperators/phone/teleop_phone.py
+index f1af248..837d5ce 100644
+--- a/src/lerobot/teleoperators/phone/teleop_phone.py
++++ b/src/lerobot/teleoperators/phone/teleop_phone.py
+@@ -163,6 +163,8 @@ class IOSPhone(BasePhone, Teleoperator):
+             - The raw HEBI feedback object for accessing other data like button presses.
+         """
+         fbk = self._group.get_next_feedback()
++        if fbk is None:  # feedback timed out (e.g. dropped Wi-Fi packet)
++            return False, None, None, None
+         pose = fbk[0]
+         ar_pos = getattr(pose, "ar_position", None)
+         ar_quat = getattr(pose, "ar_orientation", None)
