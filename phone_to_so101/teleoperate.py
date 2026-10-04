@@ -37,8 +37,17 @@ from lerobot.types import RobotAction, RobotObservation
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.rotation import Rotation
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
+from trigger import Trigger, load_calibration, trigger_to_gripper
 
 FPS = 30
+
+# Gripper follows the SC09 trigger position smoothly (calibrate first with calibrate_trigger.py)
+# instead of the A3 slider. The calibrated trigger travel maps linearly onto the full SO-101 gripper
+# range. Swap the two values if the real gripper moves the opposite way.
+USE_TRIGGER = True
+GRIPPER_OPEN = 50.0  # released trigger: half open
+GRIPPER_CLOSED = 0.0
+TRIGGER_FULL_CLOSE_AT = 0.85  # gripper fully closed at 85% of the trigger travel
 
 # Hold the phone top-edge forward / charging port toward you. LeRobot's mapping expects the
 # phone turned 180 deg about the screen normal, so rotate the phone's motion back by 180 deg.
@@ -106,6 +115,13 @@ def main():
         to_output=transition_to_robot_action,
     )
 
+    trigger = None
+    if USE_TRIGGER:
+        trigger_calibration = load_calibration()
+        trigger = Trigger(trigger_calibration["port"], trigger_calibration["id"])
+        trigger.connect()
+        gripper_target = trigger_to_gripper(trigger.read_raw(), trigger_calibration, GRIPPER_OPEN, GRIPPER_CLOSED, TRIGGER_FULL_CLOSE_AT)
+
     # Connect to the robot and teleoperator
     robot.connect()
     teleop_device.connect()
@@ -151,6 +167,15 @@ def main():
 
         # Phone -> EE pose -> Joints transition
         joint_action = phone_to_robot_joints_processor((phone_obs, robot_obs))
+
+        if trigger is not None:
+            try:
+                gripper_target = trigger_to_gripper(
+                    trigger.read_raw(), trigger_calibration, GRIPPER_OPEN, GRIPPER_CLOSED, TRIGGER_FULL_CLOSE_AT
+                )
+            except ConnectionError:
+                pass  # missed trigger read: keep the last gripper target
+            joint_action["gripper.pos"] = gripper_target
 
         # Send action to robot
         _ = robot.send_action(joint_action)
